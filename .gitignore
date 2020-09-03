@@ -54,3 +54,6 @@ dkms.conf
 #Mac VSCode
 .vscode/
 
+#Intelij Boilerplate
+*.idea/
+

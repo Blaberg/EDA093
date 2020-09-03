@@ -24,6 +24,9 @@
 #include <readline/history.h>
 #include "parse.h"
 
+#include <unistd.h>
+#include <dirent.h>
+
 
 #define TRUE 1
 #define FALSE 0
@@ -32,6 +35,9 @@ void RunCommand(int, Command *);
 void DebugPrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+
+//Commands
+void Ls();
 
 int main(void)
 {
@@ -76,6 +82,7 @@ int main(void)
 void RunCommand(int parse_result, Command *cmd)
 {
   DebugPrintCommand(parse_result, cmd);
+  ls();
 }
 
 
@@ -154,4 +161,26 @@ void stripwhite(char *string)
   }
 
   string[++i] = '\0';
+}
+
+void Ls(){
+    printf(*getcwd(char *buf, size_t size)"\n")
+
+    struct dirent *de;  // Pointer for directory entry
+
+    // opendir() returns a pointer of DIR type.
+    DIR *dr = opendir(".");
+
+    if (dr == NULL)  // opendir returns NULL if couldn't open directory
+    {
+        printf("Could not open current directory" );
+        return 0;
+    }
+
+    // Refer http://pubs.opengroup.org/onlinepubs/7990989775/xsh/readdir.html
+    // for readdir()
+    while ((de = readdir(dr)) != NULL)
+        printf("%s\n", de->d_name);
+
+    closedir(dr);
 }
