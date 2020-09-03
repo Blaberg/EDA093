@@ -73,9 +73,28 @@ int main(void)
  * 1. Implement this function so that it executes the given command(s).
  * 2. Remove the debug printing before the final submission.
  */
-void RunCommand(int parse_result, Command *cmd)
-{
-  DebugPrintCommand(parse_result, cmd);
+void RunCommand(int parse_result, Command *cmd){
+  if(parse_result == -1){
+    printf("Error in command");
+    return;
+  }
+  Pgm* p = cmd->pgm;
+  if (p == NULL){
+      return;
+    }
+  else{
+    char **pl = p->pgmlist;
+    PrintPgm(p->next);
+
+    printf("            * [ ");
+    while (*pl)
+    {
+      if(strncmp("ls", *pl++, 2) == 0)
+        printf("Command is ls");
+      //printf("%s ", *pl++);
+    }
+    printf("]\n");
+  } 
 }
 
 
