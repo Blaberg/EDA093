@@ -34,7 +34,6 @@ void RunCommand(int, Command *);
 void DebugPrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
-void TestRunCommand(int, Command *);
 
 int main(void)
 {
@@ -47,18 +46,25 @@ int main(void)
     line = readline("> ");
 
     /* If EOF encountered, exit shell */
-    if (!line)
-    {
+    if (!line){
       break;
     }
     /* Remove leading and trailing whitespace from the line */
     stripwhite(line);
     /* If stripped line not blank */
-    if (*line)
-    {
+    if (*line){
       add_history(line);
       parse_result = parse(line, &cmd);
-      TestRunCommand(parse_result, &cmd);
+
+      if(strcmp(cmd.pgm->pgmlist[0], "exit") == 0) {
+          break;
+      } else if(strcmp(cmd.pgm->pgmlist[0], "cd") == 0) {
+          if(chdir(cmd.pgm->pgmlist[1]) != 0){
+              fprintf(stderr, "No such directory.\n");
+          }
+      } else { //Run generic commands
+          RunCommand(parse_result, &cmd);
+      }
     }
 
     /* Clear memory */
@@ -76,27 +82,8 @@ int main(void)
  * 1. Implement this function so that it executes the given command(s).
  * 2. Remove the debug printing before the final submission.
  */
+
 void RunCommand(int parse_result, Command *cmd){
-  if(parse_result == -1){
-    printf("Error in command");
-    return;
-  }
-  Pgm* p = cmd->pgm;
-  if (p == NULL){
-      return;
-    }
-  else{
-    char **pl = p->pgmlist;
-    PrintPgm(p->next);
-
-    while (*pl)
-    {
-        printf("Command is: %s\n", *pl++);
-    }
-  } 
-}
-
-void TestRunCommand(int parse_result, Command *cmd){
     if(parse_result == -1){
         printf("Could not parse the command");
         return;
@@ -111,7 +98,7 @@ void TestRunCommand(int parse_result, Command *cmd){
     } else if(pid == 0) {
         if(pgm->next != NULL) {
             /* Pipes, recursivly execute them instead */
-
+            //TODO: ADD Recursive function to handle the piping of commands
         } else { // No pipes
             int result = execvp(pgm->pgmlist[0], pgm->pgmlist);
             if(result < 0) {
@@ -119,11 +106,10 @@ void TestRunCommand(int parse_result, Command *cmd){
                 exit(1);
             }
         }
-    } else {
-
+    } else { //Parent Proccess
+        //TODO: ADD Handling of Parent Process, Maybe a wait()?
     }
 }
-
 
 /* 
  * Print a Command structure as returned by parse on stdout. 
