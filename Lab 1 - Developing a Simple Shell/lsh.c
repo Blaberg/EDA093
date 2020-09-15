@@ -24,9 +24,8 @@
 #include <readline/history.h>
 #include "parse.h"
 
+/* Additional libraries */
 #include <unistd.h>
-#include <dirent.h>
-
 
 #define TRUE 1
 #define FALSE 0
@@ -35,9 +34,7 @@ void RunCommand(int, Command *);
 void DebugPrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
-
-//Commands
-int Ls(void);
+void TestRunCommand(int, Command *);
 
 int main(void)
 {
@@ -61,7 +58,7 @@ int main(void)
     {
       add_history(line);
       parse_result = parse(line, &cmd);
-      RunCommand(parse_result, &cmd);
+      TestRunCommand(parse_result, &cmd);
     }
 
     /* Clear memory */
@@ -79,7 +76,6 @@ int main(void)
  * 1. Implement this function so that it executes the given command(s).
  * 2. Remove the debug printing before the final submission.
  */
-
 void RunCommand(int parse_result, Command *cmd){
   if(parse_result == -1){
     printf("Error in command");
@@ -93,15 +89,39 @@ void RunCommand(int parse_result, Command *cmd){
     char **pl = p->pgmlist;
     PrintPgm(p->next);
 
-    printf("            * [ ");
     while (*pl)
     {
-      if(strncmp("ls", *pl++, 2) == 0)
-        Ls();
-      //printf("%s ", *pl++);
+        printf("Command is: %s\n", *pl++);
     }
-    printf("]\n");
   } 
+}
+
+void TestRunCommand(int parse_result, Command *cmd){
+    if(parse_result == -1){
+        printf("Could not parse the command");
+        return;
+    }
+    int pid = fork();
+    struct c *pgm = cmd->pgm;
+
+    if(pid < 0) {
+        fprintf(stderr, "Fork Failed.\n");
+        return;
+
+    } else if(pid == 0) {
+        if(pgm->next != NULL) {
+            /* Pipes, recursivly execute them instead */
+
+        } else { // No pipes
+            int result = execvp(pgm->pgmlist[0], pgm->pgmlist);
+            if(result < 0) {
+                fprintf(stderr, "Invalid command: %s\n", pgm->pgmlist[0]);
+                exit(1);
+            }
+        }
+    } else {
+
+    }
 }
 
 
@@ -180,17 +200,4 @@ void stripwhite(char *string)
   }
 
   string[++i] = '\0';
-}
-
-int Ls(void){
-    DIR *d;
-    struct dirent *dir;
-    d = opendir(".");
-    if (d) {
-        while ((dir = readdir(d)) != NULL) {
-            printf("%s\n", dir->d_name);
-        }
-        closedir(d);
-    }
-    return(0);
 }
