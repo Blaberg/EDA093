@@ -30,6 +30,9 @@
 #define TRUE 1
 #define FALSE 0
 
+
+
+
 void RunCommand(int, Command *);
 void DebugPrintCommand(int, Command *);
 void PrintPgm(Pgm *);
@@ -40,8 +43,7 @@ int main(void)
   Command cmd;
   int parse_result;
 
-  while (TRUE)
-  {
+  while (TRUE){
     char *line;
     line = readline("> ");
 
@@ -69,45 +71,49 @@ int main(void)
 
     /* Clear memory */
     free(line);
+
+    //This should be enough to clean up any Zombie-processes after the execution has stopped.
+    waitpid(-1, NULL, WNOHANG);
+   //int pid = waitpid(-1, NULL, WNOHANG);
+   //printf("child %d terminated\n", pid); // Use to check if Zombie-processes terminate
   }
   return 0;
 }
 
-
-/* Execute the given command(s).
-
- * Note: The function currently only prints the command(s).
- * 
- * TODO: 
- * 1. Implement this function so that it executes the given command(s).
- * 2. Remove the debug printing before the final submission.
- */
-
 void RunCommand(int parse_result, Command *cmd){
     if(parse_result == -1){
-        printf("Could not parse the command");
+        printf("Unable to parse the command");
         return;
     }
     int pid = fork();
-    struct c *pgm = cmd->pgm;
+    struct c *p = cmd->pgm;
 
-    if(pid < 0) {
-        fprintf(stderr, "Fork Failed.\n");
-        return;
+    switch(pid){
+        case -1: /* failure */
+            fprintf(stderr, "Fork Failed.\n");
+            return;
 
-    } else if(pid == 0) {
-        if(pgm->next != NULL) {
-            /* Pipes, recursivly execute them instead */
-            //TODO: ADD Recursive function to handle the piping of commands
-        } else { // No pipes
-            int result = execvp(pgm->pgmlist[0], pgm->pgmlist);
-            if(result < 0) {
-                fprintf(stderr, "Invalid command: %s\n", pgm->pgmlist[0]);
-                exit(1);
+        case 0: /* child code */
+            if(p->next != NULL) {
+                /* Pipes, recursivly execute them instead */
+                //TODO: ADD Recursive function to handle the piping of commands
+            } else { // No pipes
+                //TODO: Check if process is a background proccess and avoid sigint
+
+                int exec = execvp(p->pgmlist[0], p->pgmlist);
+
+                if (exec < 0) {
+                    fprintf(stderr, "command not found: %s\n", p->pgmlist[0]);
+                    exit(1);
+                }
             }
-        }
-    } else { //Parent Proccess
-        //TODO: ADD Handling of Parent Process, Maybe a wait()?
+
+        default: /* parent code */
+            //If the process is not a background process then the parent will wait
+            if(cmd->background == 0) {
+                waitpid(pid, NULL, 0);
+            }
+            return;
     }
 }
 
@@ -116,8 +122,7 @@ void RunCommand(int parse_result, Command *cmd){
  * 
  * Helper function, no need to change. Might be useful to study as inpsiration.
  */
-void DebugPrintCommand(int parse_result, Command *cmd)
-{
+void DebugPrintCommand(int parse_result, Command *cmd) {
   if (parse_result != 1) {
     printf("Parse ERROR\n");
     return;
@@ -139,12 +144,9 @@ void DebugPrintCommand(int parse_result, Command *cmd)
  */
 void PrintPgm(Pgm *p)
 {
-  if (p == NULL)
-  {
+  if (p == NULL){
     return;
-  }
-  else
-  {
+  } else {
     char **pl = p->pgmlist;
 
     /* The list is in reversed order so print
@@ -152,8 +154,7 @@ void PrintPgm(Pgm *p)
      */
     PrintPgm(p->next);
     printf("            * [ ");
-    while (*pl)
-    {
+    while (*pl) {
       printf("%s ", *pl++);
     }
     printf("]\n");
@@ -169,21 +170,17 @@ void stripwhite(char *string)
 {
   register int i = 0;
 
-  while (isspace(string[i]))
-  {
+  while (isspace(string[i])){
     i++;
   }
 
-  if (i)
-  {
+  if (i){
     strcpy(string, string + i);
   }
 
   i = strlen(string) - 1;
-  while (i > 0 && isspace(string[i]))
-  {
+  while (i > 0 && isspace(string[i])){
     i--;
   }
-
   string[++i] = '\0';
 }
