@@ -37,6 +37,7 @@ void DebugPrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
 void runpipe(Command *cmd, struct c *pgm);
+int cd(char *path);
 
 int main(void)
 {
@@ -61,8 +62,8 @@ int main(void)
       if(strcmp(cmd.pgm->pgmlist[0], "exit") == 0) {
           break;
       } else if(strcmp(cmd.pgm->pgmlist[0], "cd") == 0) {
-          if(chdir(cmd.pgm->pgmlist[1]) != 0){
-              fprintf(stderr, "No such file or directory\n");
+          if(cd(cmd.pgm->pgmlist[1]) < 0){
+              perror(cmd.pgm->pgmlist[1]);
           }
       } else { //Run generic commands
           RunCommand(parse_result, &cmd);
@@ -249,4 +250,8 @@ void stripwhite(char *string)
     i--;
   }
   string[++i] = '\0';
+}
+
+int cd(char *path) {
+    return chdir(path);
 }
