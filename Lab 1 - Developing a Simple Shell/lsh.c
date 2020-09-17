@@ -26,17 +26,17 @@
 
 /* Additional libraries */
 #include <unistd.h>
+#include <fcntl.h>
 
 #define TRUE 1
 #define FALSE 0
-
-
 
 
 void RunCommand(int, Command *);
 void DebugPrintCommand(int, Command *);
 void PrintPgm(Pgm *);
 void stripwhite(char *);
+void runpipe(Command *cmd, struct c *pgm);
 
 int main(void)
 {
@@ -94,11 +94,26 @@ void RunCommand(int parse_result, Command *cmd){
             return;
 
         case 0: /* child code */
+
+            if(cmd->rstdout != NULL) {
+                int fd = open(cmd->rstdout, O_CREAT|O_RDWR, S_IRWXU);
+                dup2(fd, STDOUT_FILENO);
+            }
+            if(cmd->rstderr != NULL) {
+                int fd = open(cmd->rstderr, O_CREAT|O_RDWR, S_IRWXU);
+                dup2(fd, STDERR_FILENO);
+            }
+
             if(p->next != NULL) {
-                /* Pipes, recursivly execute them instead */
-                //TODO: ADD Recursive function to handle the piping of commands
+                /* If there is a pipe, recursivly execute the programs instead */
+                runpipe(cmd,p);
             } else { // No pipes
                 //TODO: Check if process is a background proccess and avoid sigint
+
+                if(cmd->rstdin != NULL) {
+                    int fd = open(cmd->rstdin, O_RDONLY);
+                    dup2(fd, STDIN_FILENO);
+                }
 
                 int exec = execvp(p->pgmlist[0], p->pgmlist);
 
@@ -116,6 +131,65 @@ void RunCommand(int parse_result, Command *cmd){
             return;
     }
 }
+
+
+void runpipe(Command *cmd , Pgm *p) {
+    int fd[2];
+
+    if(pipe(fd) == -1) {
+        fprintf(stderr, "Pipe failed.\n");
+        return;
+    }
+
+    int pid = fork();
+
+    switch(pid) {
+
+        case -1: /* failure */
+            fprintf(stderr, "Fork Failed.\n");
+            return;
+
+        case 0: /* Child code */
+            /* redir std output */
+            close(fd[0]);
+            dup2(fd[1], STDOUT_FILENO);
+
+            /* Move one step forward in pgm list */
+            p = p->next;
+
+            if (p->next != NULL) {
+                runpipe(cmd, p);
+            } else {
+                /* Redir std input */
+                if (cmd->rstdin != NULL) {
+                    int stdinp = open(cmd->rstdin, STDIN_FILENO);
+                    dup2(stdinp, STDIN_FILENO);
+                }
+
+                //TODO: Check if process is a background proccess and avoid sigint
+
+                int exec = execvp(p->pgmlist[0], p->pgmlist);
+
+                if (exec < 0) {
+                    fprintf(stderr, "command not found: %s\n", p->pgmlist[0]);
+                    exit(1);
+                }
+            }
+        default: /* Parent code */
+            close(fd[1]);
+            dup2(fd[0], 0);
+
+            //TODO: Check if process is a background proccess and avoid sigint
+
+            int exec = execvp(p->pgmlist[0], p->pgmlist);
+
+            if (exec < 0) {
+                fprintf(stderr, "command not found: %s\n", p->pgmlist[0]);
+                exit(1);
+            }
+    }
+}
+
 
 /* 
  * Print a Command structure as returned by parse on stdout. 
