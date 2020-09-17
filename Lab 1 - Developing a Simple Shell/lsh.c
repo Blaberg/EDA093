@@ -62,7 +62,7 @@ int main(void)
           break;
       } else if(strcmp(cmd.pgm->pgmlist[0], "cd") == 0) {
           if(chdir(cmd.pgm->pgmlist[1]) != 0){
-              fprintf(stderr, "No such directory.\n");
+              fprintf(stderr, "No such file or directory\n");
           }
       } else { //Run generic commands
           RunCommand(parse_result, &cmd);
@@ -74,7 +74,6 @@ int main(void)
 
     //This should be enough to clean up any Zombie-processes after the execution has stopped.
     waitpid(-1, NULL, WNOHANG);
-   //int pid = waitpid(-1, NULL, WNOHANG);
    //printf("child %d terminated\n", pid); // Use to check if Zombie-processes terminate
   }
   return 0;
@@ -93,15 +92,15 @@ void RunCommand(int parse_result, Command *cmd){
             fprintf(stderr, "Fork Failed.\n");
             return;
 
-        case 0: /* child code */
+        case 0: /* Child */
 
             if(cmd->rstdout != NULL) {
-                int fd = open(cmd->rstdout, O_CREAT|O_RDWR, S_IRWXU);
-                dup2(fd, STDOUT_FILENO);
+                int out = open(cmd->rstdout, O_RDWR | O_CREAT | O_TRUNC | S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
+                dup2(out, STDOUT_FILENO);
             }
             if(cmd->rstderr != NULL) {
-                int fd = open(cmd->rstderr, O_CREAT|O_RDWR, S_IRWXU);
-                dup2(fd, STDERR_FILENO);
+                int err = open(cmd->rstderr, O_RDWR | O_CREAT | O_TRUNC | S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
+                dup2(err, STDERR_FILENO);
             }
 
             if(p->next != NULL) {
@@ -111,19 +110,17 @@ void RunCommand(int parse_result, Command *cmd){
                 //TODO: Check if process is a background proccess and avoid sigint
 
                 if(cmd->rstdin != NULL) {
-                    int fd = open(cmd->rstdin, O_RDONLY);
-                    dup2(fd, STDIN_FILENO);
+                    int in = open(cmd->rstdin, O_RDONLY);
+                    dup2(in, STDIN_FILENO);
                 }
 
-                int exec = execvp(p->pgmlist[0], p->pgmlist);
-
-                if (exec < 0) {
+                if (execvp(p->pgmlist[0], p->pgmlist) < 0) {
                     fprintf(stderr, "command not found: %s\n", p->pgmlist[0]);
                     exit(1);
                 }
             }
 
-        default: /* parent code */
+        default: /* Parent */
             //If the process is not a background process then the parent will wait
             if(cmd->background == 0) {
                 waitpid(pid, NULL, 0);
@@ -134,9 +131,9 @@ void RunCommand(int parse_result, Command *cmd){
 
 
 void runpipe(Command *cmd , Pgm *p) {
-    int fd[2];
+    int fd[2]; // create file descriptor
 
-    if(pipe(fd) == -1) {
+    if(pipe(fd) == -1) {  // try to pipe
         fprintf(stderr, "Pipe failed.\n");
         return;
     }
@@ -149,47 +146,42 @@ void runpipe(Command *cmd , Pgm *p) {
             fprintf(stderr, "Fork Failed.\n");
             return;
 
-        case 0: /* Child code */
-            /* redir std output */
-            close(fd[0]);
-            dup2(fd[1], STDOUT_FILENO);
+        case 0: /* Child */
 
-            /* Move one step forward in pgm list */
+            dup2(fd[1], STDOUT_FILENO); // redirect the std output
+            close(fd[0]); // close the read end of the pipe
+
+            /* step program */
             p = p->next;
 
             if (p->next != NULL) {
                 runpipe(cmd, p);
             } else {
-                /* Redir std input */
                 if (cmd->rstdin != NULL) {
                     int stdinp = open(cmd->rstdin, STDIN_FILENO);
-                    dup2(stdinp, STDIN_FILENO);
+                    dup2(stdinp, STDIN_FILENO); // redirect the std input
                 }
 
                 //TODO: Check if process is a background proccess and avoid sigint
 
-                int exec = execvp(p->pgmlist[0], p->pgmlist);
-
-                if (exec < 0) {
+                if (execvp(p->pgmlist[0], p->pgmlist) < 0) {
                     fprintf(stderr, "command not found: %s\n", p->pgmlist[0]);
                     exit(1);
                 }
             }
-        default: /* Parent code */
-            close(fd[1]);
-            dup2(fd[0], 0);
+        default: /* Parent */
+
+            dup2(fd[0], STDIN_FILENO); // redirect the std input
+            close(fd[1]); // close the write end of the pipe
 
             //TODO: Check if process is a background proccess and avoid sigint
 
-            int exec = execvp(p->pgmlist[0], p->pgmlist);
-
-            if (exec < 0) {
+            if (execvp(p->pgmlist[0], p->pgmlist) < 0) {
                 fprintf(stderr, "command not found: %s\n", p->pgmlist[0]);
                 exit(1);
             }
     }
 }
-
 
 /* 
  * Print a Command structure as returned by parse on stdout. 
