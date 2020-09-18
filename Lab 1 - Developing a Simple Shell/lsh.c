@@ -43,6 +43,7 @@ int main(void)
 {
   Command cmd;
   int parse_result;
+  signal(SIGINT, SIG_IGN);
 
   while (TRUE){
     char *line;
@@ -109,11 +110,15 @@ void RunCommand(int parse_result, Command *cmd){
                 runpipe(cmd,p);
             } else { // No pipes
                 //TODO: Check if process is a background proccess and avoid sigint
+                if(cmd->background == 0) {
+                    signal(SIGINT, SIG_DFL);
+                }
 
                 if(cmd->rstdin != NULL) {
                     int in = open(cmd->rstdin, O_RDONLY);
                     dup2(in, STDIN_FILENO);
                 }
+
 
                 if (execvp(p->pgmlist[0], p->pgmlist) < 0) {
                     fprintf(stderr, "command not found: %s\n", p->pgmlist[0]);
@@ -164,6 +169,9 @@ void runpipe(Command *cmd , Pgm *p) {
                 }
 
                 //TODO: Check if process is a background proccess and avoid sigint
+                if(cmd->background == 0) {
+                    signal(SIGINT, SIG_DFL);
+                }
 
                 if (execvp(p->pgmlist[0], p->pgmlist) < 0) {
                     fprintf(stderr, "command not found: %s\n", p->pgmlist[0]);
@@ -176,6 +184,9 @@ void runpipe(Command *cmd , Pgm *p) {
             close(fd[1]); // close the write end of the pipe
 
             //TODO: Check if process is a background proccess and avoid sigint
+            if(cmd->background == 0) {
+                signal(SIGINT, SIG_DFL);
+            }
 
             if (execvp(p->pgmlist[0], p->pgmlist) < 0) {
                 fprintf(stderr, "command not found: %s\n", p->pgmlist[0]);
