@@ -33,88 +33,96 @@
 
 
 void RunCommand(int, Command *);
+
 void DebugPrintCommand(int, Command *);
+
 void PrintPgm(Pgm *);
+
 void stripwhite(char *);
+
 void runpipe(Command *cmd, struct c *pgm);
+
 int cd(char *path);
 
-int main(void)
-{
-  Command cmd;
-  int parse_result;
-  signal(SIGINT, SIG_IGN);
+void handler(int sig);
 
-  while (TRUE){
-    char *line;
-    line = readline("> ");
+int main(void) {
+    Command cmd;
+    int parse_result;
+    signal(SIGINT, SIG_IGN);
 
-    /* If EOF encountered, exit shell */
-    if (!line){
-      break;
+    while (TRUE) {
+        char *line;
+        line = readline("> ");
+
+        /* If EOF encountered, exit shell */
+        if (!line) {
+            break;
+        }
+        /* Remove leading and trailing whitespace from the line */
+        stripwhite(line);
+        /* If stripped line not blank */
+        if (*line) {
+            add_history(line);
+            parse_result = parse(line, &cmd);
+
+            if (strcmp(cmd.pgm->pgmlist[0], "exit") == 0) {
+                break;
+            } else if (strcmp(cmd.pgm->pgmlist[0], "cd") == 0) {
+                if (cd(cmd.pgm->pgmlist[1]) < 0) {
+                    perror(cmd.pgm->pgmlist[1]);
+                }
+            } else { //Run generic commands
+                RunCommand(parse_result, &cmd);
+            }
+        }
+
+        /* Clear memory */
+        free(line);
+
+        //This should be enough to clean up any Zombie-processes after the execution has stopped.
+        waitpid(-1, NULL, WNOHANG);
+        //printf("child %d terminated\n", pid); // Use to check if Zombie-processes terminate
     }
-    /* Remove leading and trailing whitespace from the line */
-    stripwhite(line);
-    /* If stripped line not blank */
-    if (*line){
-      add_history(line);
-      parse_result = parse(line, &cmd);
-
-      if(strcmp(cmd.pgm->pgmlist[0], "exit") == 0) {
-          break;
-      } else if(strcmp(cmd.pgm->pgmlist[0], "cd") == 0) {
-          if(cd(cmd.pgm->pgmlist[1]) < 0){
-              perror(cmd.pgm->pgmlist[1]);
-          }
-      } else { //Run generic commands
-          RunCommand(parse_result, &cmd);
-      }
-    }
-
-    /* Clear memory */
-    free(line);
-
-    //This should be enough to clean up any Zombie-processes after the execution has stopped.
-    waitpid(-1, NULL, WNOHANG);
-   //printf("child %d terminated\n", pid); // Use to check if Zombie-processes terminate
-  }
-  return 0;
+    return 0;
 }
 
-void RunCommand(int parse_result, Command *cmd){
-    if(parse_result == -1){
+void RunCommand(int parse_result, Command *cmd) {
+    if (parse_result == -1) {
         printf("Unable to parse the command");
         return;
     }
     int pid = fork();
     struct c *p = cmd->pgm;
 
-    switch(pid){
+    switch (pid) {
         case -1: /* failure */
             fprintf(stderr, "Fork Failed.\n");
             return;
 
         case 0: /* Child */
 
-            if(cmd->rstdout != NULL) {
+            if (cmd->rstdout != NULL) {
                 int out = open(cmd->rstdout, O_RDWR | O_CREAT | O_TRUNC | S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
                 dup2(out, STDOUT_FILENO);
             }
-            if(cmd->rstderr != NULL) {
+            if (cmd->rstderr != NULL) {
                 int err = open(cmd->rstderr, O_RDWR | O_CREAT | O_TRUNC | S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
                 dup2(err, STDERR_FILENO);
             }
 
-            if(p->next != NULL) {
+            if (p->next != NULL) {
                 /* If there is a pipe, recursivly execute the programs instead */
-                runpipe(cmd,p);
+                runpipe(cmd, p);
             } else { // No pipes
                 //TODO: Check if process is a background proccess and avoid sigint
-                if(cmd->background == 0) {
+                if (cmd->background == 0) {
                     signal(SIGINT, SIG_DFL);
+                } else {
+                    fprintf(stdout, "Started: %d\n>", getpid());
                 }
 
-                if(cmd->rstdin != NULL) {
+                if (cmd->rstdin != NULL) {
                     int in = open(cmd->rstdin, O_RDONLY);
                     dup2(in, STDIN_FILENO);
                 }
@@ -128,7 +136,7 @@ void RunCommand(int parse_result, Command *cmd){
 
         default: /* Parent */
             //If the process is not a background process then the parent will wait
-            if(cmd->background == 0) {
+            if (cmd->background == 0) {
                 waitpid(pid, NULL, 0);
             }
             return;
@@ -136,17 +144,17 @@ void RunCommand(int parse_result, Command *cmd){
 }
 
 
-void runpipe(Command *cmd , Pgm *p) {
+void runpipe(Command *cmd, Pgm *p) {
     int fd[2]; // create file descriptor
 
-    if(pipe(fd) == -1) {  // try to pipe
+    if (pipe(fd) == -1) {  // try to pipe
         fprintf(stderr, "Pipe failed.\n");
         return;
     }
 
     int pid = fork();
 
-    switch(pid) {
+    switch (pid) {
 
         case -1: /* failure */
             fprintf(stderr, "Fork Failed.\n");
@@ -169,8 +177,11 @@ void runpipe(Command *cmd , Pgm *p) {
                 }
 
                 //TODO: Check if process is a background proccess and avoid sigint
-                if(cmd->background == 0) {
+                if (cmd->background == 0) {
                     signal(SIGINT, SIG_DFL);
+                } else {
+                    fprintf(stdout, "Started: %d\n>", getpid());
+
                 }
 
                 if (execvp(p->pgmlist[0], p->pgmlist) < 0) {
@@ -184,9 +195,12 @@ void runpipe(Command *cmd , Pgm *p) {
             close(fd[1]); // close the write end of the pipe
 
             //TODO: Check if process is a background proccess and avoid sigint
-            if(cmd->background == 0) {
+            if (cmd->background == 0) {
                 signal(SIGINT, SIG_DFL);
+            } else {
+                fprintf(stdout, "Started: %d\n >", getpid());
             }
+
 
             if (execvp(p->pgmlist[0], p->pgmlist) < 0) {
                 fprintf(stderr, "command not found: %s\n", p->pgmlist[0]);
@@ -201,18 +215,18 @@ void runpipe(Command *cmd , Pgm *p) {
  * Helper function, no need to change. Might be useful to study as inpsiration.
  */
 void DebugPrintCommand(int parse_result, Command *cmd) {
-  if (parse_result != 1) {
-    printf("Parse ERROR\n");
-    return;
-  }
-  printf("------------------------------\n");
-  printf("Parse OK\n");
-  printf("stdin:      %s\n", cmd->rstdin ? cmd->rstdin : "<none>");
-  printf("stdout:     %s\n", cmd->rstdout ? cmd->rstdout : "<none>");
-  printf("background: %s\n", cmd->background ? "true" : "false");
-  printf("Pgms:\n");
-  PrintPgm(cmd->pgm);
-  printf("------------------------------\n");
+    if (parse_result != 1) {
+        printf("Parse ERROR\n");
+        return;
+    }
+    printf("------------------------------\n");
+    printf("Parse OK\n");
+    printf("stdin:      %s\n", cmd->rstdin ? cmd->rstdin : "<none>");
+    printf("stdout:     %s\n", cmd->rstdout ? cmd->rstdout : "<none>");
+    printf("background: %s\n", cmd->background ? "true" : "false");
+    printf("Pgms:\n");
+    PrintPgm(cmd->pgm);
+    printf("------------------------------\n");
 }
 
 
@@ -220,23 +234,22 @@ void DebugPrintCommand(int parse_result, Command *cmd) {
  * 
  * Helper function, no need to change. Might be useful to study as inpsiration.
  */
-void PrintPgm(Pgm *p)
-{
-  if (p == NULL){
-    return;
-  } else {
-    char **pl = p->pgmlist;
+void PrintPgm(Pgm *p) {
+    if (p == NULL) {
+        return;
+    } else {
+        char **pl = p->pgmlist;
 
-    /* The list is in reversed order so print
-     * it reversed to get right
-     */
-    PrintPgm(p->next);
-    printf("            * [ ");
-    while (*pl) {
-      printf("%s ", *pl++);
+        /* The list is in reversed order so print
+         * it reversed to get right
+         */
+        PrintPgm(p->next);
+        printf("            * [ ");
+        while (*pl) {
+            printf("%s ", *pl++);
+        }
+        printf("]\n");
     }
-    printf("]\n");
-  }
 }
 
 
@@ -244,25 +257,25 @@ void PrintPgm(Pgm *p)
  *
  * Helper function, no need to change.
  */
-void stripwhite(char *string)
-{
-  register int i = 0;
+void stripwhite(char *string) {
+    register int i = 0;
 
-  while (isspace(string[i])){
-    i++;
-  }
+    while (isspace(string[i])) {
+        i++;
+    }
 
-  if (i){
-    strcpy(string, string + i);
-  }
+    if (i) {
+        strcpy(string, string + i);
+    }
 
-  i = strlen(string) - 1;
-  while (i > 0 && isspace(string[i])){
-    i--;
-  }
-  string[++i] = '\0';
+    i = strlen(string) - 1;
+    while (i > 0 && isspace(string[i])) {
+        i--;
+    }
+    string[++i] = '\0';
 }
 
 int cd(char *path) {
     return chdir(path);
 }
+
