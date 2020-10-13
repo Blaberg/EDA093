@@ -8,6 +8,7 @@
 #include "threads/thread.h"
 #include "lib/random.h" //generate random numbers
 #include "timer.h"
+#include "threads/synch.h"
 
 #define BUS_CAPACITY 3
 #define SENDER 0
@@ -15,10 +16,12 @@
 #define NORMAL 0
 #define HIGH 1
 
-struct semaphore space;
-struct semaphore mutex;
-int activeTasks = 0;
-int waitingTasks = 0;
+int space;
+struct condition waiting[2][2];
+struct lock mutex;
+struct condition send;
+struct condition recv;
+int waitingTasks[2][2];
 int currentDirection = SENDER;
 
 /*
@@ -50,10 +53,16 @@ void oneTask(task_t task);/*Task requires to use the bus and executes methods be
 void init_bus(void){ 
  
     random_init((unsigned int)123456789); 
-    
-    space.value = BUS_CAPACITY;
-    mutex.value = 1;
 
+    for(int n = 0; n<2; n++){
+        for(int m = 0; m<2; m++){
+            cond_init(&waiting[n][m]);
+        }
+    }
+    space = BUS_CAPACITY;
+    lock_init(&mutex);
+    cond_init(&send);
+    cond_init(&recv);
 }
 
 /*
@@ -123,17 +132,16 @@ void oneTask(task_t task) {
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task) 
 {
-    wait(mutex);
-    if(currentDirection != task.direction && activeTasks>0){
-        waitingTasks++;
-        signal(mutex);
-        wait(task.direction == currentDirection);
-    }else{
-        currentDirection = task.direction;
-        activeTasks++;
-        signal(mutex);
+    lock_acquire(mutex);
+    waitingTasks[task.direction][task.priority] += 1;
+    while(space < 1 || task.direction !=currentDirection || (task.priority == NORMAL && (waitingTasks[0][HIGH] || waitingTasks[1][HIGH]))) {
+        cond_wait(&waitingTasks[task.direction][task.priority], &mutex);
     }
-    wait(space);
+    waitingTasks[task.direction][task.priority] -= 1;
+    space--;
+    currentDirection=task.direction;
+    lock_release(&mutex);
+
 }
 
 /* task processes data on the bus send/receive */
@@ -145,19 +153,20 @@ void transferData(task_t task)
 /* task releases the slot */
 void leaveSlot(task_t task) 
 {
-    signal(space);
-    wait(mutex);
-    if(--activeTasks == 0){
-        while (waitingTasks>0){
-            waitingTasks--;
-            activeTasks++;
-            if(currentDirection){
-                currentDirection=0;
-            }else{
-                currentDirection = 1;
-            }
-            signal(task.direction == currentDirection);
-        }
-    }
-    signal(mutex);
+   lock_acquire(&mutex);
+   space++;
+   if(waitingTasks[currentDirection][HIGH]){
+       cond_signal(&waiting[currentDirection][HIGH]);
+
+   }else if(waitingTasks[1-currentDirection][HIGH])){
+        cond_signal(&waiting[1-currentDirection][HIGH]);
+    }else if(waitingTasks[currentDirection][NORMAL]){
+        cond_signal(&waiting[currentDirection][Normal]);
+    }else if(waitingTasks[1-currentDirection][NORMAL]){
+        cond_signal(&waiting[1-currentDirection][NORMAL]);
+    }else{
+    cond_broadcast(&waiting[currentDirection][NORMAL]);
+}
+lock_release(&mutex);
+
 }
