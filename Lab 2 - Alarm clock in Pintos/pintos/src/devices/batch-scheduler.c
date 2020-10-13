@@ -156,16 +156,15 @@ void leaveSlot(task_t task)
    lock_acquire(&mutex);
    space++;
    if(waitingTasks[currentDirection][HIGH]){
-       cond_signal(&waiting[currentDirection][HIGH]);
-
-   }else if(waitingTasks[1-currentDirection][HIGH])){
-        cond_signal(&waiting[1-currentDirection][HIGH]);
+       cond_signal(&waiting[currentDirection][HIGH],&mutex);
+   }else if(waitingTasks[1-currentDirection][HIGH]){
+        cond_signal(&waiting[1-currentDirection][HIGH],&mutex);
     }else if(waitingTasks[currentDirection][NORMAL]){
-        cond_signal(&waiting[currentDirection][Normal]);
+        cond_signal(&waiting[currentDirection][Normal],&mutex);
     }else if(waitingTasks[1-currentDirection][NORMAL]){
-        cond_signal(&waiting[1-currentDirection][NORMAL]);
+        cond_signal(&waiting[1-currentDirection][NORMAL],&mutex);
     }else{
-    cond_broadcast(&waiting[currentDirection][NORMAL]);
+    cond_broadcast(&waiting[currentDirection][NORMAL], &mutex);
 }
 lock_release(&mutex);
 
