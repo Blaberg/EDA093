@@ -7,12 +7,19 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "lib/random.h" //generate random numbers
+#include "timer.h"
 
 #define BUS_CAPACITY 3
 #define SENDER 0
 #define RECEIVER 1
 #define NORMAL 0
 #define HIGH 1
+
+struct semaphore space;
+struct semaphore mutex;
+int activeTasks = 0;
+int waitingTasks = 0;
+int currentDirection = SENDER;
 
 /*
  *	initialize task with direction and priority
@@ -44,8 +51,8 @@ void init_bus(void){
  
     random_init((unsigned int)123456789); 
     
-    msg("NOT IMPLEMENTED");
-    /* FIXME implement */
+    space.value = BUS_CAPACITY;
+    mutex.value = 1;
 
 }
 
@@ -116,20 +123,41 @@ void oneTask(task_t task) {
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task) 
 {
-    msg("NOT IMPLEMENTED");
-    /* FIXME implement */
+    wait(mutex);
+    if(currentDirection != task.direction && activeTasks>0){
+        waitingTasks++;
+        signal(mutex);
+        wait(task.direction == currentDirection);
+    }else{
+        currentDirection = task.direction;
+        activeTasks++;
+        signal(mutex);
+    }
+    wait(space);
 }
 
 /* task processes data on the bus send/receive */
 void transferData(task_t task) 
 {
-    msg("NOT IMPLEMENTED");
-    /* FIXME implement */
+    timer_msleep(random_ulong() % 1000);
 }
 
 /* task releases the slot */
 void leaveSlot(task_t task) 
 {
-    msg("NOT IMPLEMENTED");
-    /* FIXME implement */
+    signal(space);
+    wait(mutex);
+    if(--activeTasks == 0){
+        while (waitingTasks>0){
+            waitingTasks--;
+            activeTasks++;
+            if(currentDirection){
+                currentDirection=0;
+            }else{
+                currentDirection = 1;
+            }
+            signal(task.direction == currentDirection);
+        }
+    }
+    signal(mutex);
 }
