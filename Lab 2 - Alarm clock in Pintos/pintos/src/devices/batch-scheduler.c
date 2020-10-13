@@ -135,7 +135,7 @@ void getSlot(task_t task)
 {
     lock_acquire(&mutex);
     waitingTasks[task.direction][task.priority] += 1;
-    while(space < 1 || task.direction !=currentDirection || (task.priority == NORMAL && (waitingTasks[0][HIGH]>0 || waitingTasks[1][HIGH]>0))) {
+    while(space < 1 || (space  < 3 && (task.direction !=currentDirection || (task.priority == NORMAL && (waitingTasks[0][HIGH]>0 || waitingTasks[1][HIGH]>0))))) {
         cond_wait(&waiting[task.direction][task.priority], &mutex);
     }
     waitingTasks[task.direction][task.priority] -= 1;
