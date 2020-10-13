@@ -53,9 +53,9 @@ void oneTask(task_t task);/*Task requires to use the bus and executes methods be
 void init_bus(void){ 
  
     random_init((unsigned int)123456789); 
-
-    for(int n = 0; n<2; n++){
-        for(int m = 0; m<2; m++){
+    int n,m;
+    for( n = 0; n<2; n++){
+        for( m = 0; m<2; m++){
             cond_init(&waiting[n][m]);
         }
     }
@@ -132,7 +132,7 @@ void oneTask(task_t task) {
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task) 
 {
-    lock_acquire(mutex);
+    lock_acquire(&mutex);
     waitingTasks[task.direction][task.priority] += 1;
     while(space < 1 || task.direction !=currentDirection || (task.priority == NORMAL && (waitingTasks[0][HIGH] || waitingTasks[1][HIGH]))) {
         cond_wait(&waitingTasks[task.direction][task.priority], &mutex);
@@ -160,7 +160,7 @@ void leaveSlot(task_t task)
    }else if(waitingTasks[1-currentDirection][HIGH]){
         cond_signal(&waiting[1-currentDirection][HIGH],&mutex);
     }else if(waitingTasks[currentDirection][NORMAL]){
-        cond_signal(&waiting[currentDirection][Normal],&mutex);
+        cond_signal(&waiting[currentDirection][NORMAL],&mutex);
     }else if(waitingTasks[1-currentDirection][NORMAL]){
         cond_signal(&waiting[1-currentDirection][NORMAL],&mutex);
     }else{
