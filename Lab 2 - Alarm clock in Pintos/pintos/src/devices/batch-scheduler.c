@@ -8,7 +8,6 @@
 #include "threads/thread.h"
 #include "lib/random.h" //generate random numbers
 #include "timer.h"
-#include "threads/synch.h"
 
 #define BUS_CAPACITY 3
 #define SENDER 0
@@ -16,13 +15,12 @@
 #define NORMAL 0
 #define HIGH 1
 
-int space;
-struct condition waiting[2][2];
+
+struct condition direction[4];
+int priority[2];
 struct lock mutex;
-struct condition send;
-struct condition recv;
-int waitingTasks[2][2];
-int currentDirection = SENDER;
+int currentDir;
+int space;
 
 /*
  *	initialize task with direction and priority
@@ -49,21 +47,18 @@ void oneTask(task_t task);/*Task requires to use the bus and executes methods be
 
 
 
-/* initializes semaphores */
-void init_bus(void){
+/* initializes semaphores */ 
+void init_bus(void){ 
+ 
+    random_init((unsigned int)123456789); 
 
-    random_init((unsigned int)123456789);
-    int n,m;
-    for( n = 0; n<2; n++){
-        for( m = 0; m<2; m++){
-            cond_init(&waiting[n][m]);
-            waitingTasks[n][m] = 0;
-        }
-    }
-    space = BUS_CAPACITY;
     lock_init(&mutex);
-    cond_init(&send);
-    cond_init(&recv);
+    int i;
+    for(i = 0; i < 4; i++){
+        cond_init(&direction[i]);
+    }
+    currentDir = SENDER;
+    space = 0;
 }
 
 /*
@@ -131,42 +126,39 @@ void oneTask(task_t task) {
 
 
 /* task tries to get slot on the bus subsystem */
-void getSlot(task_t task)
-{
+void getSlot(task_t task) {
     lock_acquire(&mutex);
-    waitingTasks[task.direction][task.priority] += 1;
-    while(space < 1 || (space  < 3 && (task.direction !=currentDirection || (task.priority == NORMAL && (waitingTasks[0][HIGH]>0 || waitingTasks[1][HIGH]>0))))) {
-        cond_wait(&waiting[task.direction][task.priority], &mutex);
+    if(space == 3 || (task.direction != currentDir) && space > 0) { // if full or wrong direction we must wait
+        if(task.priority){ //high priority = 1
+            priority[task.direction] += 1;                      // increment priority list for sender/reciever
+            cond_wait(&direction[2 + task.direction],&mutex);   // add high prio sender or reciever to waiting
+            priority[task.direction] -=  1;                     // decrement priority list for sender/reciever
+        } else { // low priority = 0
+			cond_wait(&direction[task.direction],&mutex); // add low prio sender or reciever to waiting list
+		}
     }
-    waitingTasks[task.direction][task.priority] -= 1;
-    space--;
-    currentDirection=task.direction;
+    currentDir = task.direction;
+    space++;
     lock_release(&mutex);
-
 }
 
 /* task processes data on the bus send/receive */
-void transferData(task_t task)
+void transferData(task_t task) 
 {
-    timer_msleep(random_ulong() % 1000);
+    timer_msleep(random_ulong() % 100);
 }
 
 /* task releases the slot */
-void leaveSlot(task_t task)
-{
-   lock_acquire(&mutex);
-   space++;
-   if(&waitingTasks[currentDirection][HIGH]){
-       cond_signal(&waiting[currentDirection][HIGH],&mutex);
-   }else if(&waitingTasks[1-currentDirection][HIGH]){
-        cond_signal(&waiting[1-currentDirection][HIGH],&mutex);
-    }else if(&waitingTasks[currentDirection][NORMAL]){
-        cond_signal(&waiting[currentDirection][NORMAL],&mutex);
-    }else if(&waitingTasks[1-currentDirection][NORMAL]){
-        cond_signal(&waiting[1-currentDirection][NORMAL],&mutex);
-    }else{
-    cond_broadcast(&waiting[currentDirection][NORMAL], &mutex);
-}
-lock_release(&mutex);
+void leaveSlot(task_t task)  {
+    lock_acquire(&mutex);
+    space--;
 
+    if(priority[task.direction]){                               // if any high priorities in my direction
+        cond_signal(&direction[2 + task.direction],&mutex); 
+    } else if (priority[1 - task.direction]) {                  // if any high priorities in other direction
+        cond_signal(&direction[3 - task.direction],&mutex); 
+    } else {                                                    // otherwise signal low priority my direction
+        cond_signal(&direction[task.direction],&mutex); 
+    }
+    lock_release(&mutex);
 }
